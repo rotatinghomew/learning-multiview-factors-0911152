@@ -4,7 +4,7 @@ import json
 
 from learning.client import SourceClient
 from learning.codec import encode
-from learning.domain import ANALYSES, PRODUCT, validate
+from learning.domain import ANALYSES, PRODUCT, run_analysis, validate
 from learning.store import Conflict, Store
 
 
@@ -56,7 +56,8 @@ class AnalysisHandler(BaseHTTPRequestHandler):
                 raise ValueError("分析类型未登记")
             tables, revision = self.server.source.load(request["release"])
             validate(tables)
-            result = ANALYSES[request["analysis"]](tables, request.get("parameters", {}))
+            result = run_analysis(request["analysis"], tables, request.get("parameters", {}),
+                                  self.server.store.get)
             return self.send_json(201, self.server.store.save(request, revision, result))
         except Conflict as error:
             return self.send_json(409, {"error": str(error)})

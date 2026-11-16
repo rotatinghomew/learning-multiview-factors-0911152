@@ -44,6 +44,28 @@ def main():
             loaded = call("http://127.0.0.1:8766/analyses/" + record["id"])
             if loaded != record:
                 raise RuntimeError("保存的分析与返回值不一致")
+            profile = call("http://127.0.0.1:8766/analyses", {
+                "request_key": "local-shared-barriers", "release": "term-a", "analysis": "shared_barriers",
+                "parameters": {},
+            })
+            structure = profile["result"]["structure"]
+            print(json.dumps({
+                "id": profile["id"], "mode": profile["result"]["mode"],
+                "structure_version": profile["result"]["structure_version"],
+                "dimensions": [{"id": row["id"], "kind": row["kind"], "views": row["views"]}
+                               for row in structure["dimensions"]],
+                "dimension_count": structure["estimation"].get("dimension_count"),
+                "position_status": profile["result"]["position_summary"]["person_status"],
+                "diagnostics": sorted(profile["result"]["diagnostics"]),
+            }, ensure_ascii=False, indent=2))
+            reused = call("http://127.0.0.1:8766/analyses", {
+                "request_key": "local-shared-barriers-apply", "release": "term-b",
+                "analysis": "shared_barriers", "parameters": {"structure_from": profile["id"]},
+            })
+            if reused["result"]["mode"] != "apply" or reused["result"]["structure_source"]["analysis"] != profile["id"]:
+                raise RuntimeError("沿用已保存结构失败")
+            if call("http://127.0.0.1:8766/analyses/" + profile["id"])["result"]["mode"] != "fit":
+                raise RuntimeError("沿用结构不得改动来源分析")
             print(f"本地分析完成，用时 {time.monotonic() - started:.2f} 秒")
         finally:
             for process in processes:

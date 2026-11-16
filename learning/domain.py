@@ -1,9 +1,9 @@
-from collections import Counter, defaultdict
-import math
+from collections import defaultdict
 
 import numpy as np
 
 from learning.codec import numeric, require_fields, unique
+from learning.shared_barriers import apply_structure, shared_barriers
 
 PRODUCT = '学习支持画像'
 KEYS = {'people': ['person'], 'observations': ['person', 'view', 'feature'], 'features': ['view', 'feature']}
@@ -38,4 +38,28 @@ def overview(tables, parameters):
             "coverage": {view: len(members) for view, members in coverage.items()}}
 
 
-ANALYSES = {"overview": overview}
+ANALYSES = {"overview": overview, "shared_barriers": shared_barriers}
+
+
+def run_analysis(name, tables, parameters, lookup):
+    """Run a registered analysis, resolving ``structure_from`` for reuse.
+
+    ``parameters.structure_from`` names an earlier shared_barriers analysis id.
+    Its saved structure is applied to the current tables; the original fit is
+    never recomputed or overwritten.
+    """
+    if name not in ANALYSES:
+        raise ValueError("分析类型未登记")
+    if name != "shared_barriers" or "structure_from" not in parameters:
+        return ANALYSES[name](tables, parameters)
+    record = lookup(parameters["structure_from"])
+    if record is None:
+        raise ValueError("引用的结构分析不存在")
+    if record["request"].get("analysis") != "shared_barriers" or record["result"].get("mode") != "fit":
+        raise ValueError("引用的分析不是可复用的结构拟合")
+    structure = record["result"].get("structure")
+    if not isinstance(structure, dict):
+        raise ValueError("引用的分析没有保存结构")
+    clean = {key: value for key, value in parameters.items() if key != "structure_from"}
+    return apply_structure(tables, clean, structure,
+                           {"id": record["id"], "revision": record["revision"]})
